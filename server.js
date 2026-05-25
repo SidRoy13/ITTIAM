@@ -16,7 +16,6 @@ const upload = multer({
 });
 
 const db = require("./db");
-db.load();
 
 const PORT = process.env.PORT || 3000;
 const app = express();
@@ -401,9 +400,11 @@ app.use(express.static(path.join(__dirname, "public")));
 
 // ---------- authoritative timer loop ----------
 setInterval(() => {
+  const data = db.get();
+  if (!data) return;
   const now = Date.now();
   let changed = false;
-  for (const item of db.get().items) {
+  for (const item of data.items) {
     if (item.status === "live" && item.endsAt && now >= item.endsAt) {
       item.status = "closed";
       item.endsAt = null;
@@ -416,7 +417,8 @@ setInterval(() => {
 }, 1000);
 
 const HOST = process.env.HOST || "0.0.0.0";
-server.listen(PORT, HOST, () => {
+db.init().then(() => {
+  server.listen(PORT, HOST, () => {
   console.log(`Auction site listening on ${HOST}:${PORT}`);
   console.log(`  Local:   http://localhost:${PORT}`);
   const nets = require("os").networkInterfaces();
@@ -429,4 +431,8 @@ server.listen(PORT, HOST, () => {
   }
   console.log("Seed admin login:  admin@auction.local / admin123");
   console.log("Seed bidder login: bidder@auction.local / bidder123");
+  });
+}).catch((err) => {
+  console.error("Failed to initialise storage:", err);
+  process.exit(1);
 });

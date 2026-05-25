@@ -7,8 +7,15 @@ const bcrypt = require("bcryptjs");
 const DATA_DIR = path.join(__dirname, "data");
 const DB_FILE = path.join(DATA_DIR, "db.json");
 
+const USE_PG = !!process.env.DATABASE_URL;
+
 let state = null;
-let writeQueued = false;
+let pool = null;
+
+// async write debounce (shared by both backends)
+let saveTimer = null;
+let dirty = false;
+let saving = false;
 
 function defaultState() {
   const now = Date.now();
@@ -90,38 +97,76 @@ function defaultState() {
   };
 }
 
-function load() {
-  try {
+// Load existing state (or seed defaults) from the active backend. Call once at startup.
+async function init() {
+  if (USE_PG) {
+    const { Pool } = require("pg");
+    const url = process.env.DATABASE_URL;
+    const isLocal = /@(localhost|127\.0\.0\.1)/.test(url);
+    pool = new Pool({
+      connectionString: url,
+      ssl: isLocal ? false : { rejectUnauthorized: false },
+    });
+    await pool.query(
+      "CREATE TABLE IF NOT EXISTS app_state (id integer PRIMARY KEY, data jsonb NOT NULL)"
+    );
+    const res = await pool.query("SELECT data FROM app_state WHERE id = 1");
+    if (res.rows.length) {
+      state = res.rows[0].data; // pg parses jsonb into a JS object
+    } else {
+      state = defaultState();
+      await pool.query("INSERT INTO app_state (id, data) VALUES (1, $1)", [
+        JSON.stringify(state),
+      ]);
+    }
+    console.log("Storage: PostgreSQL (persistent)");
+  } else {
     if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
     if (fs.existsSync(DB_FILE)) {
       state = JSON.parse(fs.readFileSync(DB_FILE, "utf8"));
     } else {
       state = defaultState();
-      save();
+      fs.writeFileSync(DB_FILE, JSON.stringify(state, null, 2));
     }
-  } catch (err) {
-    console.error("Failed to load db, starting fresh:", err.message);
-    state = defaultState();
-    save();
+    console.log("Storage: local file (data/db.json)");
   }
 }
 
+// Mark the in-memory state dirty; it is flushed to the backend asynchronously (debounced).
 function save() {
-  if (writeQueued) return;
-  writeQueued = true;
-  setImmediate(() => {
-    writeQueued = false;
-    try {
+  dirty = true;
+  if (!saveTimer) saveTimer = setTimeout(flush, 300);
+}
+
+async function flush() {
+  saveTimer = null;
+  if (saving) {
+    saveTimer = setTimeout(flush, 300);
+    return;
+  }
+  if (!dirty) return;
+  saving = true;
+  dirty = false;
+  try {
+    if (USE_PG) {
+      await pool.query(
+        "INSERT INTO app_state (id, data) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data",
+        [JSON.stringify(state)]
+      );
+    } else {
       fs.writeFileSync(DB_FILE, JSON.stringify(state, null, 2));
-    } catch (err) {
-      console.error("Failed to save db:", err.message);
     }
-  });
+  } catch (err) {
+    console.error("Failed to persist state:", err.message);
+    dirty = true; // keep dirty so the next flush retries
+  } finally {
+    saving = false;
+    if (dirty && !saveTimer) saveTimer = setTimeout(flush, 300);
+  }
 }
 
 function get() {
-  if (!state) load();
   return state;
 }
 
-module.exports = { get, save, load, DB_FILE };
+module.exports = { init, get, save, DB_FILE };

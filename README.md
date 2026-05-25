@@ -69,10 +69,21 @@ git branch -M main
 git push -u origin main
 ```
 
-**Free-tier caveats (important):**
+**Data persistence:** the blueprint also provisions a **free Render PostgreSQL** database (`beardoauction-db`) and injects its connection string as `DATABASE_URL`. The app stores all state there, so **uploaded users, lots, and bids survive deploys and restarts**. (If `DATABASE_URL` is not set — e.g. local dev — it transparently falls back to the `data/db.json` file.)
 
-- **Storage is ephemeral.** Data lives in `data/db.json` on the instance's disk, which Render **resets on every deploy and on wake from idle**. So users you bulk-upload and bids placed will be **lost** when the service restarts, and it re-seeds the demo data (3 lots, admin/bidder logins). Fine for a demo; for durable data we'd switch the JSON store to a hosted database (e.g. Render Postgres) — ask me and I'll wire it up.
-- Free services **spin down after ~15 min idle**; the next visit takes ~50s to wake. The URL stays the same.
+**Free-tier notes:**
+
+- Free web services **spin down after ~15 min idle**; the next visit takes ~50s to wake. The URL stays the same and your data is intact.
+- Render's **free Postgres has a limited lifetime** (Render may expire free databases after a period). For indefinitely-free persistence, create a free database on **[Neon](https://neon.tech)** or **Supabase** and paste its connection string into the `DATABASE_URL` env var on the Render service instead — no code change needed.
+
+## Storage configuration
+
+| `DATABASE_URL` | Backend used |
+|----------------|--------------|
+| set            | PostgreSQL (persistent) — any Postgres: Render, Neon, Supabase, local |
+| not set        | `data/db.json` file (local dev / demo) |
+
+The whole app state is stored as a single JSON document (a `jsonb` row in the `app_state` table), written with a short debounce so rapid bids don't hammer the database.
 
 ## Branding & logo
 
