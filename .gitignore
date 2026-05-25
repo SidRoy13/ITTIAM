@@ -1,0 +1,9 @@
+node_modules/
+data/db.json
+.claude/
+*.exe
+Beardo Logo.jfif
+npm-debug.log*
+*.log
+.DS_Store
+.env

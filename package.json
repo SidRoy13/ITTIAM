@@ -1,0 +1,21 @@
+{
+  "name": "auction-house",
+  "version": "1.0.0",
+  "description": "Timed auction site with pre-registered users, admin-controlled timers, catalog and live bidding.",
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "express": "^4.21.2",
+    "express-session": "^1.18.1",
+    "multer": "^2.1.1",
+    "socket.io": "^4.8.1",
+    "xlsx": "^0.18.5"
+  }
+}

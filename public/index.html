@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Catalog · Beardo Mega Auction</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <main>
+    <h1>Beardo Mega Auction</h1>
+    <p class="muted">Bid on open lots before their timer runs out. The administrator controls when each lot opens and closes.</p>
+    <div id="loginHint"></div>
+    <div id="grid" class="grid"></div>
+    <p id="empty" class="muted" style="display:none">No lots are available yet.</p>
+  </main>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/common.js"></script>
+  <script>
+    let me = null;
+    const items = new Map();
+
+    function timeLeftMs(it) {
+      if (it.status === "live" && it.endsAt) return it.endsAt - Date.now();
+      if (it.status === "paused" && it.remainingMs) return it.remainingMs;
+      return null;
+    }
+
+    function cardHtml(it) {
+      const left = timeLeftMs(it);
+      const canBid = me && it.status === "live" && left > 0;
+      const thumb = it.imageUrl
+        ? `<div class="thumb" style="background-image:url('${it.imageUrl.replace(/'/g, "")}')"></div>`
+        : `<div class="thumb">No image</div>`;
+
+      let timerHtml = "";
+      if (it.status === "live") timerHtml = `<span class="timer" data-timer="${it.id}">${AH.fmtRemaining(left)}</span>`;
+      else if (it.status === "paused") timerHtml = `<span class="timer">${AH.fmtRemaining(left)} (paused)</span>`;
+      else if (it.status === "closed") timerHtml = `<span class="muted">Auction closed</span>`;
+      else timerHtml = `<span class="muted">Not yet open</span>`;
+
+      const bids = it.bids.map((b, i) =>
+        `<li><span>${i === 0 ? "★ " : ""}${escapeHtml(b.userName)}</span><span>${AH.money(b.amount)}</span></li>`
+      ).join("") || `<li class="muted">No bids yet — base price is the floor.</li>`;
+
+      const bidForm = me
+        ? `<div class="inline" style="margin-top:10px">
+             <input type="number" min="${it.minNextBid}" step="1" placeholder="≥ ${AH.money(it.minNextBid)}" data-bid="${it.id}" ${canBid ? "" : "disabled"} />
+             <button class="primary" data-place="${it.id}" ${canBid ? "" : "disabled"}>Bid</button>
+           </div>`
+        : `<p class="small muted" style="margin-top:10px"><a href="/login.html">Log in</a> to place a bid.</p>`;
+
+      return `
+        <div class="card" data-card="${it.id}">
+          ${thumb}
+          <div class="body">
+            <div class="row"><h3>${escapeHtml(it.title)}</h3>${AH.statusBadge(it.status)}</div>
+            <div class="desc">${escapeHtml(it.description || "")}</div>
+            <div class="row">
+              <span class="price">Base <strong>${AH.money(it.basePrice)}</strong></span>
+              <span class="price">Current <strong>${AH.money(it.currentBid)}</strong></span>
+            </div>
+            <div class="row">${timerHtml}<span class="small muted">${it.bidCount} bid(s)</span></div>
+            <ul class="bid-list">${bids}</ul>
+            <div data-msg="${it.id}"></div>
+            ${bidForm}
+          </div>
+        </div>`;
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    }
+
+    function render() {
+      const grid = document.getElementById("grid");
+      const list = [...items.values()].sort((a, b) => {
+        const rank = { live: 0, paused: 1, draft: 2, closed: 3 };
+        return (rank[a.status] - rank[b.status]) || a.id - b.id;
+      });
+      grid.innerHTML = list.map(cardHtml).join("");
+      document.getElementById("empty").style.display = list.length ? "none" : "block";
+      wire();
+    }
+
+    function wire() {
+      document.querySelectorAll("[data-place]").forEach((btn) => {
+        btn.onclick = async () => {
+          const id = Number(btn.dataset.place);
+          const input = document.querySelector(`[data-bid="${id}"]`);
+          const msg = document.querySelector(`[data-msg="${id}"]`);
+          msg.innerHTML = "";
+          try {
+            await AH.api(`/api/items/${id}/bids`, { method: "POST", body: { amount: Number(input.value) } });
+            input.value = "";
+            msg.innerHTML = `<div class="notice ok small">Bid placed!</div>`;
+            setTimeout(() => (msg.innerHTML = ""), 2000);
+          } catch (err) {
+            msg.innerHTML = `<div class="notice error small">${err.message}</div>`;
+          }
+        };
+      });
+    }
+
+    // smooth per-second countdown without full re-render
+    setInterval(() => {
+      let needRender = false;
+      document.querySelectorAll("[data-timer]").forEach((el) => {
+        const it = items.get(Number(el.dataset.timer));
+        if (!it) return;
+        const left = timeLeftMs(it);
+        if (left <= 0) { needRender = true; return; }
+        el.textContent = AH.fmtRemaining(left);
+        el.classList.toggle("urgent", left < 30000);
+      });
+      if (needRender) render();
+    }, 1000);
+
+    (async function init() {
+      me = await AH.renderTopbar("/");
+      if (!me) {
+        document.getElementById("loginHint").innerHTML =
+          `<div class="notice ok">You are browsing as a guest. <a href="/login.html">Log in</a> with your registered account to bid.</div>`;
+      }
+      const { items: list } = await AH.api("/api/items");
+      list.forEach((it) => items.set(it.id, it));
+      render();
+
+      const socket = io();
+      socket.on("item:update", (it) => { items.set(it.id, it); render(); });
+      socket.on("item:remove", ({ id }) => { items.delete(id); render(); });
+    })();
+  </script>
+</body>
+</html>

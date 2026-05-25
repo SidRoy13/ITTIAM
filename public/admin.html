@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin · Beardo Mega Auction</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <main>
+    <h1>Administration</h1>
+    <div id="guard"></div>
+    <div id="app" style="display:none">
+
+      <!-- Lots & timers -->
+      <div class="panel">
+        <h2>Lots &amp; Timers</h2>
+        <p class="muted small">Set a duration (seconds) and press Start to open bidding. The countdown is enforced by the server — bids after it ends are rejected.</p>
+        <table id="itemsTable">
+          <thead><tr><th>Lot</th><th>Status</th><th>Base</th><th>Top bid</th><th>Time left</th><th>Controls</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <!-- New lot -->
+      <div class="panel">
+        <h2>Add a Lot</h2>
+        <div id="itemMsg"></div>
+        <form id="itemForm">
+          <div class="field"><label>Title</label><input id="i_title" required /></div>
+          <div class="field"><label>Description</label><textarea id="i_desc" rows="2"></textarea></div>
+          <div class="row" style="gap:14px">
+            <div class="field" style="flex:1"><label>Base price</label><input id="i_base" type="number" min="1" step="1" required /></div>
+            <div class="field" style="flex:2"><label>Image URL (optional)</label><input id="i_img" placeholder="https://…" /></div>
+          </div>
+          <button class="primary" type="submit">Create lot</button>
+        </form>
+      </div>
+
+      <!-- Users -->
+      <div class="panel">
+        <h2>Registered Users</h2>
+        <div id="userMsg"></div>
+        <table id="usersTable">
+          <thead><tr><th>Name</th><th>Email</th><th>Role</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <h3>Pre-register a user</h3>
+        <form id="userForm">
+          <div class="row" style="gap:12px">
+            <div class="field" style="flex:1"><label>Name</label><input id="u_name" required /></div>
+            <div class="field" style="flex:1"><label>Email</label><input id="u_email" type="email" required /></div>
+          </div>
+          <div class="row" style="gap:12px">
+            <div class="field" style="flex:1"><label>Password</label><input id="u_pass" required /></div>
+            <div class="field" style="flex:1"><label>Role</label>
+              <select id="u_role"><option value="bidder">bidder</option><option value="admin">admin</option></select>
+            </div>
+          </div>
+          <button class="primary" type="submit">Create user</button>
+        </form>
+
+        <h3>Bulk upload from Excel</h3>
+        <p class="muted small">
+          Upload an <strong>.xlsx</strong> or <strong>.csv</strong> with a header row containing
+          <strong>Name</strong> and <strong>Email</strong> columns (an optional <strong>Role</strong> column may be
+          <em>bidder</em> or <em>admin</em>). A temporary password is generated for each new user &mdash; copy the
+          results below and share them securely. <a href="#" id="dlTemplate">Download a template</a>.
+        </p>
+        <div class="inline">
+          <input type="file" id="bulkFile" accept=".xlsx,.xls,.csv" />
+          <button class="primary" id="bulkBtn">Upload</button>
+        </div>
+        <div id="bulkMsg" style="margin-top:12px"></div>
+        <div id="bulkResults"></div>
+      </div>
+
+      <!-- Content -->
+      <div class="panel">
+        <h2>Terms &amp; Conditions and FAQ</h2>
+        <div id="contentMsg"></div>
+        <div class="field"><label>Terms &amp; Conditions</label><textarea id="c_clauses" rows="9"></textarea></div>
+        <div class="field"><label>FAQ</label><textarea id="c_faq" rows="9"></textarea></div>
+        <button class="primary" id="saveContent">Save content</button>
+      </div>
+
+    </div>
+  </main>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/common.js"></script>
+  <script>
+    const items = new Map();
+
+    function timeLeftMs(it) {
+      if (it.status === "live" && it.endsAt) return it.endsAt - Date.now();
+      if (it.status === "paused" && it.remainingMs) return it.remainingMs;
+      return null;
+    }
+
+    function controls(it) {
+      if (it.status === "draft" || it.status === "closed") {
+        return `<div class="admin-controls">
+          <input type="number" min="1" value="120" data-dur="${it.id}" title="duration seconds" />
+          <button class="primary" data-start="${it.id}">Start</button>
+          <button class="danger" data-del="${it.id}">Delete</button>
+        </div>`;
+      }
+      if (it.status === "live") {
+        return `<div class="admin-controls">
+          <input type="number" value="30" data-ext="${it.id}" title="seconds +/-" />
+          <button data-extend="${it.id}">±s</button>
+          <button class="warn" data-pause="${it.id}">Pause</button>
+          <button class="danger" data-close="${it.id}">Close now</button>
+        </div>`;
+      }
+      if (it.status === "paused") {
+        return `<div class="admin-controls">
+          <button class="primary" data-start="${it.id}">Resume</button>
+          <button class="danger" data-close="${it.id}">Close</button>
+        </div>`;
+      }
+      return "";
+    }
+
+    function renderItems() {
+      const tbody = document.querySelector("#itemsTable tbody");
+      const list = [...items.values()].sort((a, b) => a.id - b.id);
+      tbody.innerHTML = list.map((it) => {
+        const left = timeLeftMs(it);
+        return `<tr>
+          <td>${escapeHtml(it.title)}</td>
+          <td>${AH.statusBadge(it.status)}</td>
+          <td>${AH.money(it.basePrice)}</td>
+          <td>${AH.money(it.currentBid)}</td>
+          <td><span data-tl="${it.id}">${it.status === "live" || it.status === "paused" ? AH.fmtRemaining(left) : "—"}</span></td>
+          <td>${controls(it)}</td>
+        </tr>`;
+      }).join("");
+      wireItems();
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    }
+
+    function wireItems() {
+      const call = (url, body) => AH.api(url, { method: "POST", body }).catch((e) => alert(e.message));
+      document.querySelectorAll("[data-start]").forEach((b) => b.onclick = () => {
+        const id = b.dataset.start;
+        const dur = document.querySelector(`[data-dur="${id}"]`);
+        call(`/api/admin/items/${id}/start`, dur ? { durationSeconds: Number(dur.value) } : {});
+      });
+      document.querySelectorAll("[data-pause]").forEach((b) => b.onclick = () => call(`/api/admin/items/${b.dataset.pause}/pause`));
+      document.querySelectorAll("[data-close]").forEach((b) => b.onclick = () => call(`/api/admin/items/${b.dataset.close}/close`));
+      document.querySelectorAll("[data-extend]").forEach((b) => b.onclick = () => {
+        const id = b.dataset.extend;
+        const ext = document.querySelector(`[data-ext="${id}"]`);
+        call(`/api/admin/items/${id}/extend`, { seconds: Number(ext.value) });
+      });
+      document.querySelectorAll("[data-del]").forEach((b) => b.onclick = async () => {
+        if (!confirm("Delete this lot permanently?")) return;
+        await AH.api(`/api/admin/items/${b.dataset.del}`, { method: "DELETE" }).catch((e) => alert(e.message));
+      });
+    }
+
+    async function loadUsers() {
+      const { users } = await AH.api("/api/admin/users");
+      const tbody = document.querySelector("#usersTable tbody");
+      tbody.innerHTML = users.map((u) => `<tr>
+        <td>${escapeHtml(u.name)}</td><td>${escapeHtml(u.email)}</td><td>${u.role}</td>
+        <td><button class="danger small" data-deluser="${u.id}">Remove</button></td>
+      </tr>`).join("");
+      tbody.querySelectorAll("[data-deluser]").forEach((b) => b.onclick = async () => {
+        if (!confirm("Remove this user?")) return;
+        try { await AH.api(`/api/admin/users/${b.dataset.deluser}`, { method: "DELETE" }); loadUsers(); }
+        catch (e) { document.getElementById("userMsg").innerHTML = `<div class="notice error">${e.message}</div>`; }
+      });
+    }
+
+    async function loadContent() {
+      const c = await AH.api("/api/content");
+      document.getElementById("c_clauses").value = c.clauses || "";
+      document.getElementById("c_faq").value = c.faq || "";
+    }
+
+    setInterval(() => {
+      document.querySelectorAll("[data-tl]").forEach((el) => {
+        const it = items.get(Number(el.dataset.tl));
+        if (!it) return;
+        const left = timeLeftMs(it);
+        if (it.status === "live" || it.status === "paused") el.textContent = AH.fmtRemaining(left);
+      });
+    }, 1000);
+
+    (async function init() {
+      const me = await AH.renderTopbar("/admin.html");
+      if (!me || me.role !== "admin") {
+        document.getElementById("guard").innerHTML =
+          `<div class="notice error">Admin access required. <a href="/login.html">Log in</a> as an administrator.</div>`;
+        return;
+      }
+      document.getElementById("app").style.display = "block";
+
+      const { items: list } = await AH.api("/api/items");
+      list.forEach((it) => items.set(it.id, it));
+      renderItems();
+      await loadUsers();
+      await loadContent();
+
+      const socket = io();
+      socket.on("item:update", (it) => { items.set(it.id, it); renderItems(); });
+      socket.on("item:remove", ({ id }) => { items.delete(id); renderItems(); });
+
+      document.getElementById("itemForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const msg = document.getElementById("itemMsg");
+        try {
+          await AH.api("/api/admin/items", { method: "POST", body: {
+            title: document.getElementById("i_title").value.trim(),
+            description: document.getElementById("i_desc").value.trim(),
+            basePrice: Number(document.getElementById("i_base").value),
+            imageUrl: document.getElementById("i_img").value.trim(),
+          }});
+          e.target.reset();
+          msg.innerHTML = `<div class="notice ok">Lot created.</div>`;
+          setTimeout(() => (msg.innerHTML = ""), 2000);
+        } catch (err) { msg.innerHTML = `<div class="notice error">${err.message}</div>`; }
+      });
+
+      document.getElementById("userForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const msg = document.getElementById("userMsg");
+        try {
+          await AH.api("/api/admin/users", { method: "POST", body: {
+            name: document.getElementById("u_name").value.trim(),
+            email: document.getElementById("u_email").value.trim(),
+            password: document.getElementById("u_pass").value,
+            role: document.getElementById("u_role").value,
+          }});
+          e.target.reset();
+          msg.innerHTML = `<div class="notice ok">User registered.</div>`;
+          loadUsers();
+          setTimeout(() => (msg.innerHTML = ""), 2000);
+        } catch (err) { msg.innerHTML = `<div class="notice error">${err.message}</div>`; }
+      });
+
+      document.getElementById("saveContent").addEventListener("click", async () => {
+        const msg = document.getElementById("contentMsg");
+        try {
+          await AH.api("/api/admin/content", { method: "PUT", body: {
+            clauses: document.getElementById("c_clauses").value,
+            faq: document.getElementById("c_faq").value,
+          }});
+          msg.innerHTML = `<div class="notice ok">Content saved.</div>`;
+          setTimeout(() => (msg.innerHTML = ""), 2000);
+        } catch (err) { msg.innerHTML = `<div class="notice error">${err.message}</div>`; }
+      });
+
+      document.getElementById("dlTemplate").addEventListener("click", (e) => {
+        e.preventDefault();
+        const csv = "Name,Email,Role\nJane Doe,jane@example.com,bidder\nJohn Smith,john@example.com,admin\n";
+        const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+        const a = document.createElement("a");
+        a.href = url; a.download = "users-template.csv"; a.click();
+        URL.revokeObjectURL(url);
+      });
+
+      document.getElementById("bulkBtn").addEventListener("click", async () => {
+        const msg = document.getElementById("bulkMsg");
+        const out = document.getElementById("bulkResults");
+        const fileEl = document.getElementById("bulkFile");
+        msg.innerHTML = ""; out.innerHTML = "";
+        if (!fileEl.files.length) { msg.innerHTML = `<div class="notice error">Choose a file first.</div>`; return; }
+        const fd = new FormData();
+        fd.append("file", fileEl.files[0]);
+        try {
+          const res = await fetch("/api/admin/users/bulk", { method: "POST", body: fd });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Upload failed");
+          msg.innerHTML = `<div class="notice ok">${data.created} created, ${data.skipped} skipped (of ${data.total}).</div>`;
+          const rows = data.results.map((r) => `<tr>
+            <td>${r.line}</td>
+            <td>${escapeHtml(r.name || "")}</td>
+            <td>${escapeHtml(r.email || "")}</td>
+            <td>${r.status === "created" ? r.role : "—"}</td>
+            <td>${r.status === "created"
+                ? `<code>${escapeHtml(r.password)}</code>`
+                : `<span class="muted small">${escapeHtml(r.reason || "")}</span>`}</td>
+            <td>${r.status === "created" ? "✅ created" : "⏭️ skipped"}</td>
+          </tr>`).join("");
+          out.innerHTML = `<table style="margin-top:10px">
+            <thead><tr><th>Row</th><th>Name</th><th>Email</th><th>Role</th><th>Temp password / reason</th><th>Status</th></tr></thead>
+            <tbody>${rows}</tbody></table>
+            <p class="small muted">Copy the temporary passwords now &mdash; they are not stored in readable form and cannot be shown again.</p>`;
+          fileEl.value = "";
+          loadUsers();
+        } catch (err) {
+          msg.innerHTML = `<div class="notice error">${err.message}</div>`;
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

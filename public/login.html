@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Log in · Beardo Mega Auction</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <main>
+    <div class="panel center-card">
+      <img src="/img/beardo-logo.jpg" alt="Beardo" style="height:60px;display:block;margin:0 auto 16px;background:#fff;padding:8px 12px;border-radius:10px" />
+      <h1 style="text-align:center">Beardo Mega Auction</h1>
+      <h2 style="text-align:center;font-size:18px;color:var(--muted);margin-top:-6px">Member Login</h2>
+      <p class="muted small">Accounts are issued by the administrator. Public sign-up is disabled.</p>
+      <div id="msg"></div>
+      <form id="loginForm">
+        <div class="field">
+          <label for="email">Email</label>
+          <input id="email" type="email" autocomplete="username" required />
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input id="password" type="password" autocomplete="current-password" required />
+        </div>
+        <button class="primary" type="submit" style="width:100%">Log in</button>
+      </form>
+      <p class="small muted" style="margin-top:18px">
+        Demo accounts:<br />
+        admin@auction.local / admin123<br />
+        bidder@auction.local / bidder123
+      </p>
+    </div>
+  </main>
+  <script src="/js/common.js"></script>
+  <script>
+    document.getElementById("loginForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const msg = document.getElementById("msg");
+      msg.innerHTML = "";
+      try {
+        await AH.api("/api/login", {
+          method: "POST",
+          body: {
+            email: document.getElementById("email").value.trim(),
+            password: document.getElementById("password").value,
+          },
+        });
+        location.href = "/";
+      } catch (err) {
+        msg.innerHTML = `<div class="notice error">${err.message}</div>`;
+      }
+    });
+  </script>
+</body>
+</html>

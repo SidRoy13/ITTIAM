@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Terms & Conditions · Beardo Mega Auction</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <main>
+    <h1>Terms &amp; Conditions</h1>
+    <p class="muted">The rules that govern participation and bidding. Maintained by the administrator.</p>
+    <pre class="content" id="clauses">Loading…</pre>
+  </main>
+  <script src="/js/common.js"></script>
+  <script>
+    (async function () {
+      await AH.renderTopbar("/clauses.html");
+      try {
+        const c = await AH.api("/api/content");
+        document.getElementById("clauses").textContent = c.clauses || "No clauses published yet.";
+      } catch (e) {
+        document.getElementById("clauses").textContent = "Could not load clauses.";
+      }
+    })();
+  </script>
+</body>
+</html>

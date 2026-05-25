@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FAQ · Beardo Mega Auction</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <main>
+    <h1>Frequently Asked Questions</h1>
+    <p class="muted">Maintained separately by the administrator.</p>
+    <pre class="content" id="faq">Loading…</pre>
+  </main>
+  <script src="/js/common.js"></script>
+  <script>
+    (async function () {
+      await AH.renderTopbar("/faq.html");
+      try {
+        const c = await AH.api("/api/content");
+        document.getElementById("faq").textContent = c.faq || "No FAQ published yet.";
+      } catch (e) {
+        document.getElementById("faq").textContent = "Could not load FAQ.";
+      }
+    })();
+  </script>
+</body>
+</html>
