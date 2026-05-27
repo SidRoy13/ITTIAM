@@ -7,3 +7,7 @@ npm-debug.log*
 *.log
 .DS_Store
 .env
+
+# stray saved web pages accidentally dropped into the project folder
+* - Google Search.html
+*_files/
