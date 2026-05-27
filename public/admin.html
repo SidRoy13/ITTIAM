@@ -166,11 +166,28 @@
           <td>${AH.money(it.basePrice)}</td>
           <td>${AH.money(it.currentBid)}</td>
           <td>${winnerCell(it)}</td>
-          <td><span data-tl="${it.id}">${it.status === "live" || it.status === "paused" ? AH.fmtRemaining(left) : "—"}</span></td>
+          <td>${clockCell(it, left)}</td>
           <td>${controls(it)}</td>
         </tr>`;
       }).join("");
       wireItems();
+    }
+
+    function clockCell(it, left) {
+      if (it.status === "live") {
+        const urgent = left < 30000, critical = left < 10000;
+        return `<div class="digital-clock${urgent ? " urgent" : ""}${critical ? " critical" : ""}" data-clock="${it.id}">
+            <span class="dc-label">⏱ Time left</span>
+            <span class="dc-time" data-tl="${it.id}">${AH.fmtRemaining(left)}</span>
+          </div>`;
+      }
+      if (it.status === "paused") {
+        return `<div class="digital-clock paused" data-clock="${it.id}">
+            <span class="dc-label">Paused</span>
+            <span class="dc-time" data-tl="${it.id}">${AH.fmtRemaining(left)}</span>
+          </div>`;
+      }
+      return `<span class="muted">—</span>`;
     }
 
     function winnerCell(it) {
@@ -262,7 +279,14 @@
         const it = items.get(Number(el.dataset.tl));
         if (!it) return;
         const left = timeLeftMs(it);
-        if (it.status === "live" || it.status === "paused") el.textContent = AH.fmtRemaining(left);
+        if (it.status === "live" || it.status === "paused") {
+          el.textContent = AH.fmtRemaining(left);
+          const clock = el.closest("[data-clock]");
+          if (clock && it.status === "live") {
+            clock.classList.toggle("urgent", left < 30000);
+            clock.classList.toggle("critical", left < 10000);
+          }
+        }
       });
     }, 1000);
 
