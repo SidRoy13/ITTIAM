@@ -263,6 +263,23 @@ app.post("/api/admin/users/bulk", requireAdmin, (req, res) => {
   });
 });
 
+// Regenerate temporary passwords for users and return the plaintext once (for CSV export).
+// Existing passwords are bcrypt-hashed and cannot be read back, so this RESETS them.
+// Body: { scope: "all" | "bidders" } (default "all").
+app.post("/api/admin/users/credentials", requireAdmin, (req, res) => {
+  const scope = (req.body && req.body.scope) === "bidders" ? "bidders" : "all";
+  const data = db.get();
+  const out = [];
+  for (const u of data.users) {
+    if (scope === "bidders" && u.role !== "bidder") continue;
+    const password = genTempPassword();
+    u.passwordHash = bcrypt.hashSync(password, 10);
+    out.push({ name: u.name, email: u.email, role: u.role, password });
+  }
+  db.save();
+  res.json({ count: out.length, users: out });
+});
+
 app.delete("/api/admin/users/:id", requireAdmin, (req, res) => {
   const id = Number(req.params.id);
   if (id === req.user.id) return res.status(400).json({ error: "You cannot delete your own account" });

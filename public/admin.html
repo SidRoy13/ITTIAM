@@ -45,6 +45,19 @@
           <thead><tr><th>Name</th><th>Email</th><th>Role</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
+
+        <h3>Download credentials (User ID + Password)</h3>
+        <p class="muted small">
+          Stored passwords are encrypted (bcrypt) and cannot be read back. These buttons therefore
+          <strong>regenerate fresh temporary passwords</strong> for the chosen users and download them as a CSV
+          (<code>Name, User ID (email), Password, Role</code>). Existing passwords for those users stop working &mdash;
+          distribute the new ones. Logged-in sessions stay active until logout.
+        </p>
+        <div class="toolbar">
+          <button id="credBidders">Regenerate &amp; download bidders</button>
+          <button class="warn" id="credAll">Regenerate &amp; download ALL users</button>
+        </div>
+        <div id="credMsg"></div>
         <h3>Pre-register a user</h3>
         <form id="userForm">
           <div class="row" style="gap:12px">
@@ -257,14 +270,51 @@
         } catch (err) { msg.innerHTML = `<div class="notice error">${err.message}</div>`; }
       });
 
+      // --- CSV helpers ---
+      function csvCell(v) {
+        const s = String(v == null ? "" : v);
+        return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+      }
+      function downloadCsv(filename, header, rows) {
+        const lines = [header.map(csvCell).join(",")]
+          .concat(rows.map((r) => r.map(csvCell).join(",")));
+        const url = URL.createObjectURL(new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" }));
+        const a = document.createElement("a");
+        a.href = url; a.download = filename; a.click();
+        URL.revokeObjectURL(url);
+      }
+      function stamp() {
+        return new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+      }
+
       document.getElementById("dlTemplate").addEventListener("click", (e) => {
         e.preventDefault();
-        const csv = "Name,Email,Role\nJane Doe,jane@example.com,bidder\nJohn Smith,john@example.com,admin\n";
-        const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-        const a = document.createElement("a");
-        a.href = url; a.download = "users-template.csv"; a.click();
-        URL.revokeObjectURL(url);
+        downloadCsv("users-template.csv", ["Name", "Email", "Role"], [
+          ["Jane Doe", "jane@example.com", "bidder"],
+          ["John Smith", "john@example.com", "admin"],
+        ]);
       });
+
+      // --- Regenerate & download credentials ---
+      async function regenCredentials(scope, label) {
+        const msg = document.getElementById("credMsg");
+        msg.innerHTML = "";
+        if (!confirm(`This will RESET passwords for ${label} and download them as a CSV.\nTheir current passwords will stop working. Continue?`)) return;
+        try {
+          const data = await AH.api("/api/admin/users/credentials", { method: "POST", body: { scope } });
+          if (!data.count) { msg.innerHTML = `<div class="notice error">No matching users.</div>`; return; }
+          downloadCsv(
+            `beardo-credentials-${scope}-${stamp()}.csv`,
+            ["Name", "User ID (email)", "Password", "Role"],
+            data.users.map((u) => [u.name, u.email, u.password, u.role])
+          );
+          msg.innerHTML = `<div class="notice ok">Regenerated and downloaded ${data.count} credential(s). Distribute the CSV securely.</div>`;
+        } catch (err) {
+          msg.innerHTML = `<div class="notice error">${err.message}</div>`;
+        }
+      }
+      document.getElementById("credBidders").addEventListener("click", () => regenCredentials("bidders", "all BIDDERS"));
+      document.getElementById("credAll").addEventListener("click", () => regenCredentials("all", "ALL USERS (including admins)"));
 
       document.getElementById("bulkBtn").addEventListener("click", async () => {
         const msg = document.getElementById("bulkMsg");
@@ -292,7 +342,16 @@
           out.innerHTML = `<table style="margin-top:10px">
             <thead><tr><th>Row</th><th>Name</th><th>Email</th><th>Role</th><th>Temp password / reason</th><th>Status</th></tr></thead>
             <tbody>${rows}</tbody></table>
-            <p class="small muted">Copy the temporary passwords now &mdash; they are not stored in readable form and cannot be shown again.</p>`;
+            <div class="toolbar" style="margin-top:10px"><button class="primary" id="bulkDownload">Download credentials CSV</button></div>
+            <p class="small muted">Copy or download the temporary passwords now &mdash; they are not stored in readable form and cannot be shown again.</p>`;
+          const created = data.results.filter((r) => r.status === "created");
+          const dlBtn = document.getElementById("bulkDownload");
+          dlBtn.disabled = !created.length;
+          dlBtn.addEventListener("click", () => downloadCsv(
+            `beardo-credentials-upload-${stamp()}.csv`,
+            ["Name", "User ID (email)", "Password", "Role"],
+            created.map((r) => [r.name, r.email, r.password, r.role])
+          ));
           fileEl.value = "";
           loadUsers();
         } catch (err) {
