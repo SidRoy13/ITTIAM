@@ -17,7 +17,17 @@
         <h2>Lots &amp; Timers</h2>
         <p class="muted small">Set a duration (seconds) and press Start to open bidding. The countdown is enforced by the server — bids after it ends are rejected.</p>
         <table id="itemsTable">
-          <thead><tr><th>Lot</th><th>Status</th><th>Base</th><th>Top bid</th><th>Time left</th><th>Controls</th></tr></thead>
+          <thead><tr><th>Lot</th><th>Status</th><th>Base</th><th>Top bid</th><th>Winner / Leading</th><th>Time left</th><th>Controls</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <!-- Auction results / winners -->
+      <div class="panel">
+        <h2>Auction Results &mdash; Winners</h2>
+        <p class="muted small">Final winner of each closed lot (highest bid at close), including the winner's email so you can follow up. Lots still in progress show the current leader.</p>
+        <table id="resultsTable">
+          <thead><tr><th>Lot</th><th>Status</th><th>Winner</th><th>Email</th><th>Winning bid</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -155,11 +165,21 @@
           <td>${AH.statusBadge(it.status)}</td>
           <td>${AH.money(it.basePrice)}</td>
           <td>${AH.money(it.currentBid)}</td>
+          <td>${winnerCell(it)}</td>
           <td><span data-tl="${it.id}">${it.status === "live" || it.status === "paused" ? AH.fmtRemaining(left) : "—"}</span></td>
           <td>${controls(it)}</td>
         </tr>`;
       }).join("");
       wireItems();
+    }
+
+    function winnerCell(it) {
+      if (!it.currentBidder) {
+        return it.status === "closed" ? `<span class="muted">No bids</span>` : "—";
+      }
+      const who = `${escapeHtml(it.currentBidder)} · ${AH.money(it.currentBid)}`;
+      if (it.status === "closed") return `<span style="color:var(--good)">🏆 ${who}</span>`;
+      return `<span class="muted small">Leading: ${who}</span>`;
     }
 
     function escapeHtml(s) {
@@ -206,6 +226,37 @@
       document.getElementById("c_faq").value = c.faq || "";
     }
 
+    let resultsTimer = null;
+    function scheduleResults() {
+      if (resultsTimer) return;
+      resultsTimer = setTimeout(() => { resultsTimer = null; loadResults(); }, 400);
+    }
+    async function loadResults() {
+      let results;
+      try { ({ results } = await AH.api("/api/admin/results")); } catch { return; }
+      const tbody = document.querySelector("#resultsTable tbody");
+      tbody.innerHTML = results.map((r) => {
+        const w = r.winner || r.leading;
+        let winnerCol, emailCol, bidCol;
+        if (!w) {
+          winnerCol = r.status === "closed" ? `<span class="muted">No bids</span>` : "—";
+          emailCol = "—"; bidCol = "—";
+        } else {
+          const tag = r.status === "closed" ? `🏆 ` : `<span class="small muted">(leading) </span>`;
+          winnerCol = `${tag}${escapeHtml(w.name)}`;
+          emailCol = w.email ? `<a href="mailto:${encodeURIComponent(w.email)}">${escapeHtml(w.email)}</a>` : `<span class="muted">—</span>`;
+          bidCol = AH.money(w.amount);
+        }
+        return `<tr>
+          <td>${escapeHtml(r.title)}</td>
+          <td>${AH.statusBadge(r.status)}</td>
+          <td>${winnerCol}</td>
+          <td>${emailCol}</td>
+          <td>${bidCol}</td>
+        </tr>`;
+      }).join("");
+    }
+
     setInterval(() => {
       document.querySelectorAll("[data-tl]").forEach((el) => {
         const it = items.get(Number(el.dataset.tl));
@@ -229,10 +280,11 @@
       renderItems();
       await loadUsers();
       await loadContent();
+      await loadResults();
 
       const socket = io();
-      socket.on("item:update", (it) => { items.set(it.id, it); renderItems(); });
-      socket.on("item:remove", ({ id }) => { items.delete(id); renderItems(); });
+      socket.on("item:update", (it) => { items.set(it.id, it); renderItems(); scheduleResults(); });
+      socket.on("item:remove", ({ id }) => { items.delete(id); renderItems(); scheduleResults(); });
 
       const fileInput = document.getElementById("i_file");
       const preview = document.getElementById("i_preview");

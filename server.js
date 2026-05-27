@@ -75,6 +75,14 @@ function highestBid(item) {
   return item.bids.reduce((a, b) => (b.amount > a.amount ? b : a));
 }
 
+// Resolve the winning/leading bidder for a lot, including email (admin use only).
+function winnerOf(item) {
+  const top = highestBid(item);
+  if (!top) return null;
+  const user = findUser((u) => u.id === top.userId);
+  return { name: top.userName, email: user ? user.email : null, amount: top.amount, at: top.at };
+}
+
 function publicItem(item, { includeDraft } = {}) {
   const top = highestBid(item);
   return {
@@ -439,6 +447,23 @@ app.post("/api/admin/items/:id/close", requireAdmin, (req, res) => {
   db.save();
   broadcastItem(item);
   res.json({ item: publicItem(item) });
+});
+
+// ---------- admin: auction results / winners ----------
+app.get("/api/admin/results", requireAdmin, (req, res) => {
+  const results = db.get().items.map((it) => {
+    const w = winnerOf(it);
+    return {
+      id: it.id,
+      title: it.title,
+      status: it.status,
+      basePrice: it.basePrice,
+      bidCount: it.bids.length,
+      winner: it.status === "closed" ? w : null, // final winner
+      leading: it.status !== "closed" ? w : null, // in-progress leader
+    };
+  });
+  res.json({ results });
 });
 
 // ---------- admin: content (clauses / faq) ----------
