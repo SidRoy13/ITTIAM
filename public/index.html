@@ -34,11 +34,23 @@
         ? `<div class="thumb" style="background-image:url('${it.imageUrl.replace(/'/g, "")}')"></div>`
         : `<div class="thumb">No image</div>`;
 
-      let timerHtml = "";
-      if (it.status === "live") timerHtml = `<span class="timer" data-timer="${it.id}">${AH.fmtRemaining(left)}</span>`;
-      else if (it.status === "paused") timerHtml = `<span class="timer">${AH.fmtRemaining(left)} (paused)</span>`;
-      else if (it.status === "closed") timerHtml = `<span class="muted">Auction closed</span>`;
-      else timerHtml = `<span class="muted">Not yet open</span>`;
+      let clockHtml = "";
+      if (it.status === "live") {
+        const urgent = left < 30000, critical = left < 10000;
+        clockHtml = `<div class="digital-clock${urgent ? " urgent" : ""}${critical ? " critical" : ""}" data-clock="${it.id}">
+            <span class="dc-label">⏱ Time left</span>
+            <span class="dc-time" data-timer="${it.id}">${AH.fmtRemaining(left)}</span>
+          </div>`;
+      } else if (it.status === "paused") {
+        clockHtml = `<div class="digital-clock paused" data-clock="${it.id}">
+            <span class="dc-label">Paused</span>
+            <span class="dc-time" data-timer="${it.id}">${AH.fmtRemaining(left)}</span>
+          </div>`;
+      } else if (it.status === "closed") {
+        clockHtml = `<div class="digital-clock closed"><span class="dc-label">Auction closed</span><span class="dc-time">--:--</span></div>`;
+      } else {
+        clockHtml = `<div class="digital-clock"><span class="dc-label">Opens soon</span><span class="dc-time">--:--</span></div>`;
+      }
 
       const bids = it.bids.map((b, i) =>
         `<li><span>${i === 0 ? "★ " : ""}${escapeHtml(b.userName)}</span><span>${AH.money(b.amount)}</span></li>`
@@ -61,7 +73,8 @@
               <span class="price">Base <strong>${AH.money(it.basePrice)}</strong></span>
               <span class="price">Current <strong>${AH.money(it.currentBid)}</strong></span>
             </div>
-            <div class="row">${timerHtml}<span class="small muted">${it.bidCount} bid(s)</span></div>
+            ${clockHtml}
+            <div class="row" style="justify-content:flex-end"><span class="small muted">${it.bidCount} bid(s)</span></div>
             <ul class="bid-list">${bids}</ul>
             <div data-msg="${it.id}"></div>
             ${bidForm}
@@ -110,9 +123,13 @@
         const it = items.get(Number(el.dataset.timer));
         if (!it) return;
         const left = timeLeftMs(it);
-        if (left <= 0) { needRender = true; return; }
+        if (it.status === "live" && left <= 0) { needRender = true; return; }
         el.textContent = AH.fmtRemaining(left);
-        el.classList.toggle("urgent", left < 30000);
+        const clock = el.closest("[data-clock]");
+        if (clock && it.status === "live") {
+          clock.classList.toggle("urgent", left < 30000);
+          clock.classList.toggle("critical", left < 10000);
+        }
       });
       if (needRender) render();
     }, 1000);
