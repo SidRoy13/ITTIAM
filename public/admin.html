@@ -29,10 +29,19 @@
         <form id="itemForm">
           <div class="field"><label>Title</label><input id="i_title" required /></div>
           <div class="field"><label>Description</label><textarea id="i_desc" rows="2"></textarea></div>
-          <div class="row" style="gap:14px">
-            <div class="field" style="flex:1"><label>Base price</label><input id="i_base" type="number" min="1" step="1" required /></div>
-            <div class="field" style="flex:2"><label>Image URL (optional)</label><input id="i_img" placeholder="https://…" /></div>
+          <div class="field"><label>Base price</label><input id="i_base" type="number" min="1" step="1" required /></div>
+          <div class="row" style="gap:14px; align-items:flex-start">
+            <div class="field" style="flex:1">
+              <label>Product image (optional)</label>
+              <input id="i_file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
+              <span class="small muted">JPEG, PNG, WebP or GIF · up to 5&nbsp;MB</span>
+            </div>
+            <div class="field" style="flex:1">
+              <label>…or image URL</label>
+              <input id="i_img" placeholder="https://…" />
+            </div>
           </div>
+          <div id="i_preview" style="margin-bottom:12px"></div>
           <button class="primary" type="submit">Create lot</button>
         </form>
       </div>
@@ -225,20 +234,44 @@
       socket.on("item:update", (it) => { items.set(it.id, it); renderItems(); });
       socket.on("item:remove", ({ id }) => { items.delete(id); renderItems(); });
 
+      const fileInput = document.getElementById("i_file");
+      const preview = document.getElementById("i_preview");
+      fileInput.addEventListener("change", () => {
+        preview.innerHTML = "";
+        const f = fileInput.files[0];
+        if (!f) return;
+        if (f.size > 5 * 1024 * 1024) {
+          preview.innerHTML = `<div class="notice error small">Image exceeds 5 MB.</div>`;
+          return;
+        }
+        const url = URL.createObjectURL(f);
+        preview.innerHTML = `<img src="${url}" alt="preview" style="height:90px;border-radius:8px;border:1px solid var(--border)" />`;
+      });
+
       document.getElementById("itemForm").addEventListener("submit", async (e) => {
         e.preventDefault();
         const msg = document.getElementById("itemMsg");
+        const btn = e.target.querySelector("button[type=submit]");
+        btn.disabled = true;
         try {
-          await AH.api("/api/admin/items", { method: "POST", body: {
-            title: document.getElementById("i_title").value.trim(),
-            description: document.getElementById("i_desc").value.trim(),
-            basePrice: Number(document.getElementById("i_base").value),
-            imageUrl: document.getElementById("i_img").value.trim(),
-          }});
+          const fd = new FormData();
+          fd.append("title", document.getElementById("i_title").value.trim());
+          fd.append("description", document.getElementById("i_desc").value.trim());
+          fd.append("basePrice", String(Number(document.getElementById("i_base").value)));
+          fd.append("imageUrl", document.getElementById("i_img").value.trim());
+          if (fileInput.files[0]) fd.append("image", fileInput.files[0]);
+          const res = await fetch("/api/admin/items", { method: "POST", body: fd });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Could not create lot");
           e.target.reset();
+          preview.innerHTML = "";
           msg.innerHTML = `<div class="notice ok">Lot created.</div>`;
           setTimeout(() => (msg.innerHTML = ""), 2000);
-        } catch (err) { msg.innerHTML = `<div class="notice error">${err.message}</div>`; }
+        } catch (err) {
+          msg.innerHTML = `<div class="notice error">${err.message}</div>`;
+        } finally {
+          btn.disabled = false;
+        }
       });
 
       document.getElementById("userForm").addEventListener("submit", async (e) => {

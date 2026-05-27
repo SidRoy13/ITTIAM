@@ -2,12 +2,28 @@
 
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 
 const DATA_DIR = path.join(__dirname, "data");
 const DB_FILE = path.join(DATA_DIR, "db.json");
+const IMAGES_DIR = path.join(DATA_DIR, "images");
 
 const USE_PG = !!process.env.DATABASE_URL;
+
+const EXT_BY_MIME = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/gif": "gif",
+};
+const MIME_BY_EXT = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+  gif: "image/gif",
+};
 
 let state = null;
 let pool = null;
@@ -110,6 +126,9 @@ async function init() {
     await pool.query(
       "CREATE TABLE IF NOT EXISTS app_state (id integer PRIMARY KEY, data jsonb NOT NULL)"
     );
+    await pool.query(
+      "CREATE TABLE IF NOT EXISTS images (id serial PRIMARY KEY, mime text NOT NULL, data bytea NOT NULL, created_at timestamptz DEFAULT now())"
+    );
     const res = await pool.query("SELECT data FROM app_state WHERE id = 1");
     if (res.rows.length) {
       state = res.rows[0].data; // pg parses jsonb into a JS object
@@ -122,6 +141,7 @@ async function init() {
     console.log("Storage: PostgreSQL (persistent)");
   } else {
     if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    if (!fs.existsSync(IMAGES_DIR)) fs.mkdirSync(IMAGES_DIR, { recursive: true });
     if (fs.existsSync(DB_FILE)) {
       state = JSON.parse(fs.readFileSync(DB_FILE, "utf8"));
     } else {
@@ -169,4 +189,40 @@ function get() {
   return state;
 }
 
-module.exports = { init, get, save, DB_FILE };
+// ---- image blob storage (kept OUT of the state document to avoid bloating every save) ----
+
+// Store an uploaded image; returns an opaque string id for use in /api/images/:id
+async function saveImage(buffer, mime) {
+  const ext = EXT_BY_MIME[mime];
+  if (!ext) throw new Error("Unsupported image type");
+  if (USE_PG) {
+    const r = await pool.query(
+      "INSERT INTO images (mime, data) VALUES ($1, $2) RETURNING id",
+      [mime, buffer]
+    );
+    return String(r.rows[0].id);
+  }
+  if (!fs.existsSync(IMAGES_DIR)) fs.mkdirSync(IMAGES_DIR, { recursive: true });
+  const id = crypto.randomBytes(10).toString("hex") + "." + ext;
+  fs.writeFileSync(path.join(IMAGES_DIR, id), buffer);
+  return id;
+}
+
+// Fetch an image by id; returns { mime, data } or null
+async function getImage(id) {
+  if (USE_PG) {
+    if (!/^\d+$/.test(String(id))) return null;
+    const r = await pool.query("SELECT mime, data FROM images WHERE id = $1", [Number(id)]);
+    if (!r.rows.length) return null;
+    return { mime: r.rows[0].mime, data: r.rows[0].data };
+  }
+  const safe = path.basename(String(id)); // prevent path traversal
+  const file = path.join(IMAGES_DIR, safe);
+  if (!file.startsWith(IMAGES_DIR) || !fs.existsSync(file)) return null;
+  const ext = safe.split(".").pop().toLowerCase();
+  const mime = MIME_BY_EXT[ext];
+  if (!mime) return null;
+  return { mime, data: fs.readFileSync(file) };
+}
+
+module.exports = { init, get, save, saveImage, getImage, DB_FILE };

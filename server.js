@@ -15,6 +15,16 @@ const upload = multer({
   limits: { fileSize: 3 * 1024 * 1024 },
 });
 
+const ALLOWED_IMAGE_MIMES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+const imageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (ALLOWED_IMAGE_MIMES.includes(file.mimetype)) cb(null, true);
+    else cb(new Error("Only JPEG, PNG, WebP or GIF images are allowed"));
+  },
+});
+
 const db = require("./db");
 
 const PORT = process.env.PORT || 3000;
@@ -292,26 +302,55 @@ app.delete("/api/admin/users/:id", requireAdmin, (req, res) => {
 });
 
 // ---------- admin: items ----------
+// Accepts multipart/form-data (optional "image" file) or plain JSON (optional imageUrl).
 app.post("/api/admin/items", requireAdmin, (req, res) => {
-  const { title, description, basePrice, imageUrl } = req.body || {};
-  if (!title || !Number.isFinite(Number(basePrice)) || Number(basePrice) <= 0) {
-    return res.status(400).json({ error: "Title and a positive base price are required" });
+  imageUpload.single("image")(req, res, async (err) => {
+    if (err) return res.status(400).json({ error: err.message || "Image upload failed" });
+
+    const { title, description, basePrice, imageUrl } = req.body || {};
+    if (!title || !Number.isFinite(Number(basePrice)) || Number(basePrice) <= 0) {
+      return res.status(400).json({ error: "Title and a positive base price are required" });
+    }
+
+    let finalImageUrl = String(imageUrl || "").trim();
+    if (req.file) {
+      try {
+        const id = await db.saveImage(req.file.buffer, req.file.mimetype);
+        finalImageUrl = "/api/images/" + id;
+      } catch (e) {
+        return res.status(400).json({ error: "Could not store image: " + e.message });
+      }
+    }
+
+    const data = db.get();
+    const item = {
+      id: data.nextItemId++,
+      title: String(title).trim(),
+      description: String(description || "").trim(),
+      imageUrl: finalImageUrl,
+      basePrice: Number(basePrice),
+      status: "draft",
+      endsAt: null,
+      bids: [],
+    };
+    data.items.push(item);
+    db.save();
+    broadcastItem(item);
+    res.json({ item: publicItem(item, { includeDraft: true }) });
+  });
+});
+
+// ---------- public: serve uploaded images ----------
+app.get("/api/images/:id", async (req, res) => {
+  try {
+    const img = await db.getImage(req.params.id);
+    if (!img) return res.status(404).send("Image not found");
+    res.set("Content-Type", img.mime);
+    res.set("Cache-Control", "public, max-age=31536000, immutable");
+    res.send(img.data);
+  } catch (e) {
+    res.status(500).send("Image error");
   }
-  const data = db.get();
-  const item = {
-    id: data.nextItemId++,
-    title: String(title).trim(),
-    description: String(description || "").trim(),
-    imageUrl: String(imageUrl || "").trim(),
-    basePrice: Number(basePrice),
-    status: "draft",
-    endsAt: null,
-    bids: [],
-  };
-  data.items.push(item);
-  db.save();
-  broadcastItem(item);
-  res.json({ item: publicItem(item, { includeDraft: true }) });
 });
 
 app.put("/api/admin/items/:id", requireAdmin, (req, res) => {
