@@ -478,22 +478,21 @@
       });
 
       // --- Regenerate & download credentials ---
-      async function regenCredentials(scope, label) {
+      // Browser-native download via hidden form POST: server returns CSV with
+      // Content-Disposition: attachment, so no popup-blocker / blob issues.
+      function regenCredentials(scope, label) {
         const msg = document.getElementById("credMsg");
         msg.innerHTML = "";
         if (!confirm(`This will RESET passwords for ${label} and download them as a CSV.\nTheir current passwords will stop working. Continue?`)) return;
-        try {
-          const data = await AH.api("/api/admin/users/credentials", { method: "POST", body: { scope } });
-          if (!data.count) { msg.innerHTML = `<div class="notice error">No matching users.</div>`; return; }
-          downloadCsv(
-            `beardo-credentials-${scope}-${stamp()}.csv`,
-            ["Name", "User ID (email)", "Password", "Role"],
-            data.users.map((u) => [u.name, u.email, u.password, u.role])
-          );
-          msg.innerHTML = `<div class="notice ok">Regenerated and downloaded ${data.count} credential(s). Distribute the CSV securely.</div>`;
-        } catch (err) {
-          msg.innerHTML = `<div class="notice error">${err.message}</div>`;
-        }
+        const form = document.createElement("form");
+        form.method = "POST";
+        form.action = `/api/admin/users/credentials.csv?scope=${encodeURIComponent(scope)}`;
+        form.style.display = "none";
+        document.body.appendChild(form);
+        form.submit();
+        setTimeout(() => form.remove(), 1500);
+        msg.innerHTML = `<div class="notice ok">Credentials regenerated &mdash; the CSV download should start now. Distribute it securely.</div>`;
+        setTimeout(loadUsers, 800);
       }
       document.getElementById("credBidders").addEventListener("click", () => regenCredentials("bidders", "all BIDDERS"));
       document.getElementById("credAll").addEventListener("click", () => regenCredentials("all", "ALL USERS (including admins)"));

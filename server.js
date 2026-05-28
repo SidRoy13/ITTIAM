@@ -281,11 +281,8 @@ app.post("/api/admin/users/bulk", requireAdmin, (req, res) => {
   });
 });
 
-// Regenerate temporary passwords for users and return the plaintext once (for CSV export).
-// Existing passwords are bcrypt-hashed and cannot be read back, so this RESETS them.
-// Body: { scope: "all" | "bidders" } (default "all").
-app.post("/api/admin/users/credentials", requireAdmin, (req, res) => {
-  const scope = (req.body && req.body.scope) === "bidders" ? "bidders" : "all";
+// ---- internal helper: regenerate passwords and return the new credentials ----
+function regenerateCredentials(scope) {
   const data = db.get();
   const out = [];
   for (const u of data.users) {
@@ -295,7 +292,36 @@ app.post("/api/admin/users/credentials", requireAdmin, (req, res) => {
     out.push({ name: u.name, email: u.email, role: u.role, password });
   }
   db.save();
+  return out;
+}
+
+function csvEscape(v) {
+  const s = String(v == null ? "" : v);
+  return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+// Regenerate temporary passwords for users and return the plaintext once (for CSV export).
+// Existing passwords are bcrypt-hashed and cannot be read back, so this RESETS them.
+// Body: { scope: "all" | "bidders" } (default "all").
+app.post("/api/admin/users/credentials", requireAdmin, (req, res) => {
+  const scope = (req.body && req.body.scope) === "bidders" ? "bidders" : "all";
+  const out = regenerateCredentials(scope);
   res.json({ count: out.length, users: out });
+});
+
+// Same action, but streams a CSV file directly so the browser handles the download natively
+// (avoids popup-blocker / "lost user gesture" failures with client-side Blob downloads).
+app.post("/api/admin/users/credentials.csv", requireAdmin, (req, res) => {
+  const scope = req.query.scope === "bidders" ? "bidders" : "all";
+  const out = regenerateCredentials(scope);
+  const header = ["Name", "User ID (email)", "Password", "Role"];
+  const lines = [header.map(csvEscape).join(",")]
+    .concat(out.map((u) => [u.name, u.email, u.password, u.role].map(csvEscape).join(",")));
+  const csv = "﻿" + lines.join("\r\n"); // BOM so Excel opens UTF-8 cleanly
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+  res.set("Content-Type", "text/csv; charset=utf-8");
+  res.set("Content-Disposition", `attachment; filename="beardo-credentials-${scope}-${stamp}.csv"`);
+  res.send(csv);
 });
 
 app.delete("/api/admin/users/:id", requireAdmin, (req, res) => {
