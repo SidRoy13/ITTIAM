@@ -353,7 +353,15 @@
       await loadResults();
 
       const socket = io();
-      socket.on("item:update", (it) => { items.set(it.id, it); renderItems(); scheduleResults(); });
+      socket.on("item:update", (it) => {
+        const prev = items.get(it.id);
+        items.set(it.id, it);
+        renderItems();
+        scheduleResults();
+        if (prev && prev.status !== "closed" && it.status === "closed" && it.bidCount > 0) {
+          AH.announceWinner(it);
+        }
+      });
       socket.on("item:remove", ({ id }) => { items.delete(id); renderItems(); scheduleResults(); });
 
       const fileInput = document.getElementById("i_file");

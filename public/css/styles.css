@@ -188,6 +188,93 @@ td .digital-clock .dc-time { font-size: 26px; letter-spacing: 2px; }
 }
 @keyframes ah-spin { to { transform: rotate(360deg); } }
 
+/* ---------- Winner announcement (full-screen flash + reveal) ---------- */
+.ah-winner-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9500;
+  background: rgba(0, 0, 0, 0.93);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: opacity .5s ease;
+  overflow: hidden;
+}
+.ah-winner-overlay.ah-fade { opacity: 0; pointer-events: none; }
+.ah-flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  pointer-events: none;
+  animation: ah-flash 0.75s ease-out forwards;
+}
+@keyframes ah-flash {
+  0%   { opacity: 1; }
+  20%  { opacity: 0.85; }
+  100% { opacity: 0; }
+}
+.ah-winner-content {
+  position: relative;
+  text-align: center;
+  color: #fff;
+  padding: 0 20px;
+  animation: ah-pop 0.6s cubic-bezier(.2, 1.4, .4, 1) 0.4s both;
+}
+.ah-trophy {
+  font-size: clamp(80px, 14vw, 200px);
+  line-height: 1;
+  filter: drop-shadow(0 0 30px rgba(255, 210, 74, .7));
+  animation: ah-trophy-in 1.1s cubic-bezier(.2, 1.6, .3, 1) 0.4s both;
+}
+.ah-winner-title {
+  font-family: "Arial Black", Arial, sans-serif;
+  font-size: clamp(48px, 9vw, 130px);
+  font-weight: 900;
+  letter-spacing: 5px;
+  color: var(--accent);
+  text-shadow: 0 0 28px rgba(230, 0, 35, .95), 0 0 6px #000;
+  margin-top: 6px;
+}
+.ah-winner-name {
+  font-size: clamp(28px, 5vw, 64px);
+  font-weight: 700;
+  color: #fff;
+  margin-top: 6px;
+  text-shadow: 0 0 20px rgba(255, 255, 255, .55);
+}
+.ah-winner-lot {
+  font-size: clamp(14px, 2.2vw, 22px);
+  color: var(--muted);
+  margin-top: 2px;
+  letter-spacing: 1px;
+}
+.ah-winner-amount {
+  font-family: "Consolas", ui-monospace, monospace;
+  font-size: clamp(36px, 7.5vw, 90px);
+  font-weight: 700;
+  color: #ffd24a;
+  margin-top: 14px;
+  letter-spacing: 2px;
+  text-shadow: 0 0 22px rgba(255, 210, 74, .75);
+}
+.ah-winner-hint {
+  font-size: 12px;
+  letter-spacing: 1.6px;
+  color: rgba(255, 255, 255, .45);
+  margin-top: 24px;
+  text-transform: uppercase;
+}
+@keyframes ah-pop {
+  0%   { transform: scale(.6); opacity: 0; }
+  100% { transform: scale(1);  opacity: 1; }
+}
+@keyframes ah-trophy-in {
+  0%   { transform: scale(0) rotate(-200deg); opacity: 0; }
+  70%  { transform: scale(1.15) rotate(12deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+
 button, .btn {
   font: inherit;
   cursor: pointer;

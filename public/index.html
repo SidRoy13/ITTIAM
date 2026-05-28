@@ -146,7 +146,14 @@
       render();
 
       const socket = io();
-      socket.on("item:update", (it) => { items.set(it.id, it); render(); });
+      socket.on("item:update", (it) => {
+        const prev = items.get(it.id);
+        items.set(it.id, it);
+        render();
+        if (prev && prev.status !== "closed" && it.status === "closed" && it.bidCount > 0) {
+          AH.announceWinner(it);
+        }
+      });
       socket.on("item:remove", ({ id }) => { items.delete(id); render(); });
     })();
   </script>
