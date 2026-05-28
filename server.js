@@ -137,14 +137,16 @@ app.post("/api/login", (req, res) => {
   const user = findUser((u) => u.email.toLowerCase() === String(email).toLowerCase());
   if (!user) return res.status(401).json({ error: "This email is not registered" });
 
-  // Admin accounts always require a password (so nobody can impersonate an admin).
+  // Admins must still enter their password (so nobody can impersonate an admin by guessing the email).
   if (user.role === "admin") {
-    if (!password || !bcrypt.compareSync(password, user.passwordHash)) {
-      return res.status(401).json({ error: "Invalid admin email or password" });
+    if (!password) {
+      return res.status(401).json({ error: "Admin login requires a password — click \"Have a password?\"" });
+    }
+    if (!bcrypt.compareSync(password, user.passwordHash)) {
+      return res.status(401).json({ error: "Invalid admin password" });
     }
   } else {
-    // Bidders may log in with email alone; if a password is supplied, it's still verified
-    // (so previously-distributed passwords keep working).
+    // Bidders log in with email only; if a password is supplied, it must be valid.
     if (password && !bcrypt.compareSync(password, user.passwordHash)) {
       return res.status(401).json({ error: "Invalid password" });
     }

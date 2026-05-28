@@ -13,18 +13,21 @@
       <img src="/img/beardo-logo.jpg" alt="Beardo" style="height:60px;display:block;margin:0 auto 16px;background:#fff;padding:8px 12px;border-radius:10px" />
       <h1 style="text-align:center">Beardo Mega Auction</h1>
       <h2 style="text-align:center;font-size:18px;color:var(--muted);margin-top:-6px">Member Login</h2>
-      <p class="muted small">Accounts are issued by the administrator. Public sign-up is disabled. <strong>Bidders can log in with just their registered email</strong> — the password field is optional.</p>
+      <p class="muted small">Accounts are issued by the administrator. Public sign-up is disabled. <strong>Bidders: sign in with your registered email — no password needed.</strong> Admins must also enter a password (click the link below).</p>
       <div id="msg"></div>
       <form id="loginForm">
         <div class="field">
           <label for="email">Email</label>
-          <input id="email" type="email" autocomplete="username" required />
+          <input id="email" type="email" autocomplete="username" required autofocus />
         </div>
-        <div class="field">
-          <label for="password">Password <span class="small muted">(optional for bidders, required for admin)</span></label>
-          <input id="password" type="password" autocomplete="current-password" placeholder="Leave blank if you're a bidder" />
+        <div class="field" id="pwField" style="display:none">
+          <label for="password">Password <span class="small muted">(optional)</span></label>
+          <input id="password" type="password" autocomplete="current-password" />
         </div>
         <button class="primary" type="submit" style="width:100%">Log in</button>
+        <p class="small muted" style="text-align:center;margin-top:10px">
+          <a href="#" id="togglePw">Have a password? Click here</a>
+        </p>
       </form>
       <p class="small muted" id="demoCreds" style="margin-top:18px">
         Demo accounts:<br />
@@ -44,18 +47,24 @@
       }
     })();
 
+    document.getElementById("togglePw").addEventListener("click", (e) => {
+      e.preventDefault();
+      const fld = document.getElementById("pwField");
+      const shown = fld.style.display !== "none";
+      fld.style.display = shown ? "none" : "block";
+      e.target.textContent = shown ? "Have a password? Click here" : "Hide password field";
+      if (!shown) document.getElementById("password").focus();
+    });
+
     document.getElementById("loginForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const msg = document.getElementById("msg");
       msg.innerHTML = "";
+      const body = { email: document.getElementById("email").value.trim() };
+      const pw = document.getElementById("password").value;
+      if (pw) body.password = pw;
       try {
-        await AH.api("/api/login", {
-          method: "POST",
-          body: {
-            email: document.getElementById("email").value.trim(),
-            password: document.getElementById("password").value,
-          },
-        });
+        await AH.api("/api/login", { method: "POST", body });
         location.href = "/";
       } catch (err) {
         msg.innerHTML = `<div class="notice error">${err.message}</div>`;
