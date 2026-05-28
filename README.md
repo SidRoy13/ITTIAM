@@ -1,6 +1,18 @@
-# Auction House
+# Beardo Mega Auction
 
-A timed-auction website with pre-registered members, an admin-controlled bidding timer, a product catalog with base prices, and separate Terms & Conditions and FAQ sections. Built with Node.js, Express, Socket.IO (live updates), and a JSON file store.
+A timed-auction website with pre-registered members, an admin-controlled bidding timer, a product catalog with base prices, and separate Terms & Conditions and FAQ sections. Built with Node.js, Express, Socket.IO (live updates), and PostgreSQL on Render (file store fallback for local dev).
+
+## Production site (source of truth)
+
+> **https://beardoauction.onrender.com** — this is the **live, canonical** site, with the real lots, bidders and bids. Render's Postgres is the production database.
+
+Use this URL for the actual auction. Anyone with the URL can browse; only pre-registered users can log in to bid. Admin sign-in: `admin@auction.local` / `admin123` (please change to your own admin after the event).
+
+**Do NOT** set the `SEED_RESET_TOKEN` environment variable on the Render service — it enables an endpoint that wipes the production database and re-seeds defaults. Only set it if you explicitly want to nuke production back to demo state.
+
+## Local server (development sandbox only)
+
+The local server at `http://localhost:3000` is a **separate environment** with its own JSON-file store. It exists for code development and is **not** synced with Render. Restarting/resetting it has no effect on the live site.
 
 ## Run it
 
