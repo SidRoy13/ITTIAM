@@ -60,7 +60,7 @@ h1 { margin-top: 0; }
   flex-direction: column;
 }
 .card .thumb {
-  height: 160px;
+  height: 280px;
   background: var(--panel-2) center/cover no-repeat;
   display: flex; align-items: center; justify-content: center;
   color: var(--muted); font-size: 13px;
