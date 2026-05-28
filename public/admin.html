@@ -129,6 +129,29 @@
     </div>
   </main>
 
+  <!-- Edit Lot modal -->
+  <div id="editModal" class="ah-modal" style="display:none">
+    <div class="ah-modal-card">
+      <h2 style="margin-top:0">Edit lot</h2>
+      <div id="editMsg"></div>
+      <form id="editForm">
+        <input type="hidden" id="e_id" />
+        <div class="field"><label>Title</label><input id="e_title" required /></div>
+        <div class="field"><label>Description</label><textarea id="e_desc" rows="3"></textarea></div>
+        <div class="field"><label>Base price (₹)</label><input id="e_base" type="number" min="1" step="1" required /></div>
+        <div class="field">
+          <label>Replace product image (optional)</label>
+          <input id="e_file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
+          <div id="e_currentImg" style="margin-top:8px"></div>
+        </div>
+        <div class="toolbar" style="justify-content:flex-end">
+          <button type="button" id="editCancel">Cancel</button>
+          <button type="submit" class="primary">Save changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script src="/socket.io/socket.io.js"></script>
   <script src="/js/common.js"></script>
   <script>
@@ -171,7 +194,13 @@
       tbody.innerHTML = list.map((it) => {
         const left = timeLeftMs(it);
         return `<tr>
-          <td>${escapeHtml(it.title)}<br><button data-tb="${it.id}" style="margin-top:6px;font-size:11px;padding:4px 8px" ${it.bidCount ? "" : "disabled title='No bids yet'"}>↓ Top 10 bidders (CSV)</button></td>
+          <td>
+            ${escapeHtml(it.title)}
+            <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
+              <button data-edit="${it.id}" style="font-size:11px;padding:4px 8px">✏️ Edit</button>
+              <button data-tb="${it.id}" style="font-size:11px;padding:4px 8px" ${it.bidCount ? "" : "disabled title='No bids yet'"}>↓ Top 10 bidders (CSV)</button>
+            </div>
+          </td>
           <td>${AH.statusBadge(it.status)}</td>
           <td>${AH.money(it.basePrice)}</td>
           <td>${AH.money(it.currentBid)}</td>
@@ -230,8 +259,28 @@
       return new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
     }
 
+    // ----- Edit lot modal -----
+    function openEdit(id) {
+      const it = items.get(id);
+      if (!it) return;
+      document.getElementById("e_id").value = it.id;
+      document.getElementById("e_title").value = it.title;
+      document.getElementById("e_desc").value = it.description || "";
+      document.getElementById("e_base").value = it.basePrice;
+      document.getElementById("e_file").value = "";
+      const cur = document.getElementById("e_currentImg");
+      cur.innerHTML = it.imageUrl
+        ? `<div class="small muted" style="margin-bottom:4px">Current image (kept unless you choose a new file):</div>
+           <img src="${it.imageUrl}" alt="" style="height:80px;border:1px solid var(--border);border-radius:6px;background:#fff;padding:4px" />`
+        : `<span class="small muted">No image yet.</span>`;
+      document.getElementById("editMsg").innerHTML = "";
+      document.getElementById("editModal").style.display = "flex";
+    }
+    function closeEdit() { document.getElementById("editModal").style.display = "none"; }
+
     function wireItems() {
       const call = (url, body) => AH.api(url, { method: "POST", body }).catch((e) => alert(e.message));
+      document.querySelectorAll("[data-edit]").forEach((btn) => btn.onclick = () => openEdit(Number(btn.dataset.edit)));
       document.querySelectorAll("[data-tb]").forEach((btn) => btn.onclick = async () => {
         const id = btn.dataset.tb;
         try {
@@ -402,6 +451,34 @@
           msg.innerHTML = `<div class="notice error">${err.message}</div>`;
         } finally {
           btn.disabled = false;
+        }
+      });
+
+      document.getElementById("editCancel").addEventListener("click", closeEdit);
+      document.getElementById("editModal").addEventListener("click", (e) => {
+        if (e.target.id === "editModal") closeEdit(); // click backdrop to close
+      });
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && document.getElementById("editModal").style.display !== "none") closeEdit();
+      });
+      document.getElementById("editForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const msg = document.getElementById("editMsg");
+        msg.innerHTML = "";
+        const id = document.getElementById("e_id").value;
+        const fd = new FormData();
+        fd.append("title", document.getElementById("e_title").value.trim());
+        fd.append("description", document.getElementById("e_desc").value.trim());
+        fd.append("basePrice", String(Number(document.getElementById("e_base").value)));
+        const file = document.getElementById("e_file").files[0];
+        if (file) fd.append("image", file);
+        try {
+          const res = await fetch(`/api/admin/items/${id}`, { method: "PUT", body: fd });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Update failed");
+          closeEdit();
+        } catch (err) {
+          msg.innerHTML = `<div class="notice error">${err.message}</div>`;
         }
       });
 

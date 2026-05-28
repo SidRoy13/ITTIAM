@@ -401,19 +401,32 @@ app.get("/api/images/:id", async (req, res) => {
   }
 });
 
+// Accepts either JSON (text fields only) or multipart/form-data with an optional "image" file.
 app.put("/api/admin/items/:id", requireAdmin, (req, res) => {
-  const item = db.get().items.find((i) => i.id === Number(req.params.id));
-  if (!item) return res.status(404).json({ error: "Item not found" });
-  const { title, description, basePrice, imageUrl } = req.body || {};
-  if (title !== undefined) item.title = String(title).trim();
-  if (description !== undefined) item.description = String(description).trim();
-  if (imageUrl !== undefined) item.imageUrl = String(imageUrl).trim();
-  if (basePrice !== undefined && Number.isFinite(Number(basePrice)) && Number(basePrice) > 0) {
-    item.basePrice = Number(basePrice);
-  }
-  db.save();
-  broadcastItem(item);
-  res.json({ item: publicItem(item, { includeDraft: true }) });
+  imageUpload.single("image")(req, res, async (err) => {
+    if (err) return res.status(400).json({ error: err.message || "Image upload failed" });
+    const item = db.get().items.find((i) => i.id === Number(req.params.id));
+    if (!item) return res.status(404).json({ error: "Item not found" });
+    const { title, description, basePrice, imageUrl } = req.body || {};
+    if (title !== undefined && String(title).trim()) item.title = String(title).trim();
+    if (description !== undefined) item.description = String(description).trim();
+    if (basePrice !== undefined && Number.isFinite(Number(basePrice)) && Number(basePrice) > 0) {
+      item.basePrice = Number(basePrice);
+    }
+    if (req.file) {
+      try {
+        const id = await db.saveImage(req.file.buffer, req.file.mimetype);
+        item.imageUrl = "/api/images/" + id;
+      } catch (e) {
+        return res.status(400).json({ error: "Could not store image: " + e.message });
+      }
+    } else if (imageUrl !== undefined) {
+      item.imageUrl = String(imageUrl).trim();
+    }
+    db.save();
+    broadcastItem(item);
+    res.json({ item: publicItem(item, { includeDraft: true }) });
+  });
 });
 
 app.delete("/api/admin/items/:id", requireAdmin, (req, res) => {

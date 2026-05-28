@@ -188,6 +188,25 @@ td .digital-clock .dc-time { font-size: 26px; letter-spacing: 2px; }
 }
 @keyframes ah-spin { to { transform: rotate(360deg); } }
 
+/* ---------- Generic modal (used for the Edit Lot dialog) ---------- */
+.ah-modal {
+  position: fixed; inset: 0;
+  background: rgba(0, 0, 0, 0.78);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 8000;
+  padding: 24px;
+}
+.ah-modal-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  width: min(100%, 520px);
+  max-height: 90vh;
+  overflow: auto;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .6);
+}
+
 /* ---------- Winner announcement (full-screen flash + reveal) ---------- */
 .ah-winner-overlay {
   position: fixed;
