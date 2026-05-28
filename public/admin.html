@@ -17,6 +17,10 @@
       <div class="panel">
         <h2>Lots &amp; Timers</h2>
         <p class="muted small">Set a duration (seconds) and press Start to open bidding. The countdown is enforced by the server — bids after it ends are rejected.</p>
+        <div class="toolbar" style="margin-bottom:10px">
+          <button class="danger" id="resetAuctionBtn">🧹 Clean up &amp; start a new auction</button>
+          <span class="small muted" style="align-self:center">Removes all lots and bids. Users and Terms &amp; FAQ are kept.</span>
+        </div>
         <table id="itemsTable">
           <thead><tr><th>Lot</th><th>Status</th><th>Base</th><th>Top bid</th><th>Winner / Leading</th><th>Time left</th><th>Controls</th></tr></thead>
           <tbody></tbody>
@@ -348,6 +352,25 @@
           msg.innerHTML = `<div class="notice error">${err.message}</div>`;
         } finally {
           btn.disabled = false;
+        }
+      });
+
+      document.getElementById("resetAuctionBtn").addEventListener("click", async () => {
+        const ok = confirm(
+          "Start a NEW auction?\n\n" +
+          "This will permanently remove ALL lots and bids.\n" +
+          "Registered users, Terms & Conditions and FAQ are kept.\n\n" +
+          "Continue?"
+        );
+        if (!ok) return;
+        try {
+          const r = await AH.api("/api/admin/reset", { method: "POST" });
+          items.clear();
+          renderItems();
+          loadResults();
+          alert(`Cleaned up ${r.removed} lot(s). Add new lots below to begin the new auction.`);
+        } catch (e) {
+          alert(e.message);
         }
       });
 

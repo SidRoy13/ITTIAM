@@ -449,6 +449,18 @@ app.post("/api/admin/items/:id/close", requireAdmin, (req, res) => {
   res.json({ item: publicItem(item) });
 });
 
+// ---------- admin: clean up & start a new auction ----------
+// Removes ALL lots and bids and resets the item id counter. Users, Terms & FAQ are kept.
+app.post("/api/admin/reset", requireAdmin, (req, res) => {
+  const data = db.get();
+  const removedIds = data.items.map((i) => i.id);
+  data.items = [];
+  data.nextItemId = 1;
+  db.save();
+  removedIds.forEach((id) => io.emit("item:remove", { id }));
+  res.json({ ok: true, removed: removedIds.length });
+});
+
 // ---------- admin: auction results / winners ----------
 app.get("/api/admin/results", requireAdmin, (req, res) => {
   const results = db.get().items.map((it) => {
