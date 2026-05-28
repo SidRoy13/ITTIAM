@@ -133,11 +133,23 @@ function broadcastItem(item) {
 // ---------- auth ----------
 app.post("/api/login", (req, res) => {
   const { email, password } = req.body || {};
-  if (!email || !password) return res.status(400).json({ error: "Email and password required" });
+  if (!email) return res.status(400).json({ error: "Email required" });
   const user = findUser((u) => u.email.toLowerCase() === String(email).toLowerCase());
-  if (!user || !bcrypt.compareSync(password, user.passwordHash)) {
-    return res.status(401).json({ error: "Invalid email or password" });
+  if (!user) return res.status(401).json({ error: "This email is not registered" });
+
+  // Admin accounts always require a password (so nobody can impersonate an admin).
+  if (user.role === "admin") {
+    if (!password || !bcrypt.compareSync(password, user.passwordHash)) {
+      return res.status(401).json({ error: "Invalid admin email or password" });
+    }
+  } else {
+    // Bidders may log in with email alone; if a password is supplied, it's still verified
+    // (so previously-distributed passwords keep working).
+    if (password && !bcrypt.compareSync(password, user.passwordHash)) {
+      return res.status(401).json({ error: "Invalid password" });
+    }
   }
+
   req.session.userId = user.id;
   res.json({ user: publicUser(user) });
 });

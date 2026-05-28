@@ -13,7 +13,7 @@
       <img src="/img/beardo-logo.jpg" alt="Beardo" style="height:60px;display:block;margin:0 auto 16px;background:#fff;padding:8px 12px;border-radius:10px" />
       <h1 style="text-align:center">Beardo Mega Auction</h1>
       <h2 style="text-align:center;font-size:18px;color:var(--muted);margin-top:-6px">Member Login</h2>
-      <p class="muted small">Accounts are issued by the administrator. Public sign-up is disabled.</p>
+      <p class="muted small">Accounts are issued by the administrator. Public sign-up is disabled. <strong>Bidders can log in with just their registered email</strong> — the password field is optional.</p>
       <div id="msg"></div>
       <form id="loginForm">
         <div class="field">
@@ -21,8 +21,8 @@
           <input id="email" type="email" autocomplete="username" required />
         </div>
         <div class="field">
-          <label for="password">Password</label>
-          <input id="password" type="password" autocomplete="current-password" required />
+          <label for="password">Password <span class="small muted">(optional for bidders, required for admin)</span></label>
+          <input id="password" type="password" autocomplete="current-password" placeholder="Leave blank if you're a bidder" />
         </div>
         <button class="primary" type="submit" style="width:100%">Log in</button>
       </form>
