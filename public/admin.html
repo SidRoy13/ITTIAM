@@ -171,7 +171,7 @@
       tbody.innerHTML = list.map((it) => {
         const left = timeLeftMs(it);
         return `<tr>
-          <td>${escapeHtml(it.title)}</td>
+          <td>${escapeHtml(it.title)}<br><button data-tb="${it.id}" style="margin-top:6px;font-size:11px;padding:4px 8px" ${it.bidCount ? "" : "disabled title='No bids yet'"}>↓ Top 10 bidders (CSV)</button></td>
           <td>${AH.statusBadge(it.status)}</td>
           <td>${AH.money(it.basePrice)}</td>
           <td>${AH.money(it.currentBid)}</td>
@@ -213,8 +213,44 @@
       return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
     }
 
+    // --- CSV helpers (shared across init and row buttons) ---
+    function csvCell(v) {
+      const s = String(v == null ? "" : v);
+      return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    }
+    function downloadCsv(filename, header, rows) {
+      const lines = [header.map(csvCell).join(",")]
+        .concat(rows.map((r) => r.map(csvCell).join(",")));
+      const url = URL.createObjectURL(new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" }));
+      const a = document.createElement("a");
+      a.href = url; a.download = filename; a.click();
+      URL.revokeObjectURL(url);
+    }
+    function stamp() {
+      return new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+    }
+
     function wireItems() {
       const call = (url, body) => AH.api(url, { method: "POST", body }).catch((e) => alert(e.message));
+      document.querySelectorAll("[data-tb]").forEach((btn) => btn.onclick = async () => {
+        const id = btn.dataset.tb;
+        try {
+          const data = await AH.api(`/api/admin/items/${id}/top-bidders?n=10`);
+          if (!data.bidders.length) { alert("No bids on this lot yet."); return; }
+          const safe = data.item.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+          downloadCsv(
+            `beardo-top10-${safe || "lot" + data.item.id}-${stamp()}.csv`,
+            ["Rank", "Bidder", "Email", "Top bid", "Placed at"],
+            data.bidders.map((b) => [
+              b.rank,
+              b.name,
+              b.email || "",
+              b.amount,
+              new Date(b.at).toISOString().replace("T", " ").slice(0, 19),
+            ])
+          );
+        } catch (e) { alert(e.message); }
+      });
       document.querySelectorAll("[data-start]").forEach((b) => b.onclick = () => {
         const id = b.dataset.start;
         const dur = document.querySelector(`[data-dur="${id}"]`);
@@ -424,23 +460,6 @@
           setTimeout(() => (msg.innerHTML = ""), 2000);
         } catch (err) { msg.innerHTML = `<div class="notice error">${err.message}</div>`; }
       });
-
-      // --- CSV helpers ---
-      function csvCell(v) {
-        const s = String(v == null ? "" : v);
-        return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-      }
-      function downloadCsv(filename, header, rows) {
-        const lines = [header.map(csvCell).join(",")]
-          .concat(rows.map((r) => r.map(csvCell).join(",")));
-        const url = URL.createObjectURL(new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" }));
-        const a = document.createElement("a");
-        a.href = url; a.download = filename; a.click();
-        URL.revokeObjectURL(url);
-      }
-      function stamp() {
-        return new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-      }
 
       document.getElementById("dlTemplate").addEventListener("click", (e) => {
         e.preventDefault();

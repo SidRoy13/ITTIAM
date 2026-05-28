@@ -449,6 +449,41 @@ app.post("/api/admin/items/:id/close", requireAdmin, (req, res) => {
   res.json({ item: publicItem(item) });
 });
 
+// ---------- admin: top-N bidders for a lot ----------
+// Returns each unique bidder's highest bid on the lot, sorted high-to-low.
+// ?n=10 by default (1..100). Includes the bidder's email (admin only).
+app.get("/api/admin/items/:id/top-bidders", requireAdmin, (req, res) => {
+  const item = db.get().items.find((i) => i.id === Number(req.params.id));
+  if (!item) return res.status(404).json({ error: "Item not found" });
+  const n = Math.max(1, Math.min(100, Number(req.query.n) || 10));
+
+  // each unique userId -> their best bid {userId, userName, amount, at}
+  const best = new Map();
+  for (const b of item.bids) {
+    const cur = best.get(b.userId);
+    if (!cur || b.amount > cur.amount) best.set(b.userId, b);
+  }
+  const users = db.get().users;
+  const ranked = [...best.values()]
+    .sort((a, b) => b.amount - a.amount || a.at - b.at)
+    .slice(0, n)
+    .map((b, idx) => {
+      const u = users.find((u) => u.id === b.userId);
+      return {
+        rank: idx + 1,
+        name: b.userName,
+        email: u ? u.email : null,
+        amount: b.amount,
+        at: b.at,
+      };
+    });
+
+  res.json({
+    item: { id: item.id, title: item.title, basePrice: item.basePrice, status: item.status },
+    bidders: ranked,
+  });
+});
+
 // ---------- admin: clear bids only (keep lots) ----------
 // Wipes every lot's bids and returns it to "draft" (timer reset, ready to start again).
 // Lots, users, T&C/FAQ untouched.
