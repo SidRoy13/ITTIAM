@@ -449,6 +449,28 @@ app.post("/api/admin/items/:id/close", requireAdmin, (req, res) => {
   res.json({ item: publicItem(item) });
 });
 
+// ---------- admin: clear bids only (keep lots) ----------
+// Wipes every lot's bids and returns it to "draft" (timer reset, ready to start again).
+// Lots, users, T&C/FAQ untouched.
+app.post("/api/admin/clear-bids", requireAdmin, (req, res) => {
+  const data = db.get();
+  let lotsAffected = 0;
+  let bidsRemoved = 0;
+  for (const it of data.items) {
+    const dirty = it.bids.length > 0 || it.status !== "draft" || it.endsAt || it.remainingMs;
+    if (!dirty) continue;
+    bidsRemoved += it.bids.length;
+    it.bids = [];
+    it.status = "draft";
+    it.endsAt = null;
+    it.remainingMs = null;
+    lotsAffected++;
+    broadcastItem(it);
+  }
+  db.save();
+  res.json({ ok: true, lotsAffected, bidsRemoved });
+});
+
 // ---------- admin: clean up & start a new auction ----------
 // Removes ALL lots and bids and resets the item id counter. Users, Terms & FAQ are kept.
 app.post("/api/admin/reset", requireAdmin, (req, res) => {

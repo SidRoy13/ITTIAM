@@ -18,9 +18,14 @@
         <h2>Lots &amp; Timers</h2>
         <p class="muted small">Set a duration (seconds) and press Start to open bidding. The countdown is enforced by the server — bids after it ends are rejected.</p>
         <div class="toolbar" style="margin-bottom:10px">
+          <button class="warn" id="clearBidsBtn">🧼 Clear bids only (keep lots)</button>
           <button class="danger" id="resetAuctionBtn">🧹 Clean up &amp; start a new auction</button>
-          <span class="small muted" style="align-self:center">Removes all lots and bids. Users and Terms &amp; FAQ are kept.</span>
         </div>
+        <p class="small muted" style="margin-top:-4px">
+          <strong>Clear bids only</strong> wipes every bid and resets each lot to <em>draft</em> (timer/winner reset), keeping the lots themselves.
+          <strong>Clean up &amp; start a new auction</strong> removes the lots too.
+          Users and Terms &amp; FAQ are kept either way.
+        </p>
         <table id="itemsTable">
           <thead><tr><th>Lot</th><th>Status</th><th>Base</th><th>Top bid</th><th>Winner / Leading</th><th>Time left</th><th>Controls</th></tr></thead>
           <tbody></tbody>
@@ -352,6 +357,23 @@
           msg.innerHTML = `<div class="notice error">${err.message}</div>`;
         } finally {
           btn.disabled = false;
+        }
+      });
+
+      document.getElementById("clearBidsBtn").addEventListener("click", async () => {
+        const ok = confirm(
+          "Clear all bids?\n\n" +
+          "Every lot's bids will be wiped and the lot will be reset to DRAFT " +
+          "(timer reset, no winner). The lots themselves, your users, and Terms & FAQ are kept.\n\n" +
+          "Continue?"
+        );
+        if (!ok) return;
+        try {
+          const r = await AH.api("/api/admin/clear-bids", { method: "POST" });
+          loadResults();
+          alert(`Cleared ${r.bidsRemoved} bid(s) across ${r.lotsAffected} lot(s). All lots are back to draft.`);
+        } catch (e) {
+          alert(e.message);
         }
       });
 
