@@ -363,6 +363,7 @@
         }
       });
       socket.on("item:remove", ({ id }) => { items.delete(id); renderItems(); scheduleResults(); });
+      socket.on("items:reset", () => location.reload());
 
       const fileInput = document.getElementById("i_file");
       const preview = document.getElementById("i_preview");

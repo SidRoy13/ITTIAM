@@ -225,4 +225,25 @@ async function getImage(id) {
   return { mime, data: fs.readFileSync(file) };
 }
 
-module.exports = { init, get, save, saveImage, getImage, DB_FILE };
+// Wipe persistent state (and all uploaded images) and restore the seeded defaults.
+// Used by the token-gated seed-reset endpoint so a fresh deploy can recover from
+// e.g. a forgotten admin password or stale demo data.
+async function reseed() {
+  state = defaultState();
+  if (USE_PG) {
+    await pool.query(
+      "INSERT INTO app_state (id, data) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data",
+      [JSON.stringify(state)]
+    );
+    await pool.query("DELETE FROM images");
+  } else {
+    fs.writeFileSync(DB_FILE, JSON.stringify(state, null, 2));
+    if (fs.existsSync(IMAGES_DIR)) {
+      for (const f of fs.readdirSync(IMAGES_DIR)) {
+        try { fs.unlinkSync(path.join(IMAGES_DIR, f)); } catch (_) {}
+      }
+    }
+  }
+}
+
+module.exports = { init, get, save, saveImage, getImage, reseed, DB_FILE };

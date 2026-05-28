@@ -571,6 +571,29 @@ app.put("/api/admin/content", requireAdmin, (req, res) => {
   res.json({ content: data.content });
 });
 
+// ---------- token-gated seed reset (recovery / sync helper) ----------
+// Wipes ALL state and re-seeds defaults (3 draft lots, admin/bidder demo logins).
+// Disabled unless SEED_RESET_TOKEN env var is set; caller must provide the same
+// token in the "X-Reset-Token" header or ?token=... query string. Use sparingly.
+app.post("/api/seed-reset", async (req, res) => {
+  const expected = process.env.SEED_RESET_TOKEN;
+  if (!expected) {
+    return res.status(503).json({
+      error: "Seed reset is disabled. Set SEED_RESET_TOKEN as an env var to enable it.",
+    });
+  }
+  const got = req.get("x-reset-token") || (req.query && req.query.token);
+  if (got !== expected) return res.status(401).json({ error: "Invalid reset token" });
+  try {
+    await db.reseed();
+    // tell every connected client to drop their cached items
+    io.emit("items:reset");
+    res.json({ ok: true, message: "Database wiped and re-seeded to defaults." });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ---------- static ----------
 app.use(express.static(path.join(__dirname, "public")));
 

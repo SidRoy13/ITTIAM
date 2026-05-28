@@ -155,6 +155,7 @@
         }
       });
       socket.on("item:remove", ({ id }) => { items.delete(id); render(); });
+      socket.on("items:reset", () => location.reload());
     })();
   </script>
 </body>
