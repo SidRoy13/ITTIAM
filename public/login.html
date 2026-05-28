@@ -26,7 +26,7 @@
         </div>
         <button class="primary" type="submit" style="width:100%">Log in</button>
       </form>
-      <p class="small muted" style="margin-top:18px">
+      <p class="small muted" id="demoCreds" style="margin-top:18px">
         Demo accounts:<br />
         admin@auction.local / admin123<br />
         bidder@auction.local / bidder123
@@ -35,6 +35,15 @@
   </main>
   <script src="/js/common.js"></script>
   <script>
+    // Hide the seeded demo credentials when the link carries ?nodemo, ?clean, or ?demo=0
+    (function () {
+      const q = new URLSearchParams(location.search);
+      if (q.has("nodemo") || q.has("clean") || q.get("demo") === "0") {
+        const el = document.getElementById("demoCreds");
+        if (el) el.style.display = "none";
+      }
+    })();
+
     document.getElementById("loginForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const msg = document.getElementById("msg");
