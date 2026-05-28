@@ -61,7 +61,7 @@ h1 { margin-top: 0; }
 }
 .card .thumb {
   height: 280px;
-  background: var(--panel-2) center/cover no-repeat;
+  background: var(--panel-2) center/contain no-repeat;
   display: flex; align-items: center; justify-content: center;
   color: var(--muted); font-size: 13px;
 }
