@@ -18,7 +18,7 @@ window.AH = (function () {
 
   function money(n) {
     if (n == null) return "—";
-    return "$" + Number(n).toLocaleString();
+    return "₹" + Number(n).toLocaleString("en-IN");
   }
 
   function fmtRemaining(ms) {
